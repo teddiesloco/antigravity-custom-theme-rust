@@ -67,7 +67,10 @@ pub fn render_macos_plist(
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>StandardOutPath</key>
     <string>{log_xml}</string>
     <key>StandardErrorPath</key>
@@ -628,12 +631,11 @@ fn install_macos(paths: &AppPaths, no_startup: bool, watch_themes: bool) -> Resu
         bootout_macos_agent(&plist_path);
         let uid = current_macos_uid();
         let domain = format!("gui/{uid}");
-        let service = format!("gui/{uid}/{MACOS_SERVICE_LABEL}");
 
         let bootstrap = Command::new("launchctl")
             .args(["bootstrap", &domain, &plist_path.to_string_lossy()])
             .output();
-        let loaded = match bootstrap {
+        let _loaded = match bootstrap {
             Ok(ref o) if o.status.success() => true,
             _ => Command::new("launchctl")
                 .args(["load", "-w", &plist_path.to_string_lossy()])
@@ -641,11 +643,6 @@ fn install_macos(paths: &AppPaths, no_startup: bool, watch_themes: bool) -> Resu
                 .map(|o| o.status.success())
                 .unwrap_or(false),
         };
-        if loaded {
-            let _ = Command::new("launchctl")
-                .args(["kickstart", "-k", &service])
-                .output();
-        }
         println!("[install] LaunchAgent installed: {}", plist_path.display());
 
         let mut running_pid = None;
@@ -724,18 +721,16 @@ pub fn launch_antigravity(paths: &AppPaths, restart: bool) -> Result<()> {
             app_path.display()
         );
 
-        if !restart {
-            for _ in 0..10 {
-                if read_port_info().is_some() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(150));
+        for _ in 0..15 {
+            if read_port_info().is_some() {
+                break;
             }
-            if read_port_info().is_none() {
-                println!(
-                    "[launch] Note: DevToolsActivePort not active yet. If Antigravity was already open without CDP, quit it (Cmd+Q) or run `agy-theme launch --restart`."
-                );
-            }
+            thread::sleep(Duration::from_millis(150));
+        }
+        if read_port_info().is_none() {
+            println!(
+                "[launch] Note: DevToolsActivePort not active yet. If Antigravity remained open without CDP (e.g. unsaved dialog), quit it (Cmd+Q) and run `agy-theme launch` again."
+            );
         }
         Ok(())
     }

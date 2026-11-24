@@ -370,6 +370,8 @@ fn test_macos_plist_rendering_and_xml_escaping() {
     assert!(plist.contains("/tmp/Teddy&apos;s &quot;Repo&quot;"));
     assert!(plist.contains("<string>--watch-themes</string>"));
     assert!(plist.contains("<key>ProcessType</key>"));
+    assert!(plist.contains("<key>SuccessfulExit</key>"));
+    assert!(plist.contains("<false/>"));
 
     let plist_no_watch = render_macos_plist(&daemon, &root, &log, false);
     assert!(!plist_no_watch.contains("--watch-themes"));
