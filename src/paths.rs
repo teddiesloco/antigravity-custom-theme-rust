@@ -119,6 +119,26 @@ pub fn resolve_daemon_exe() -> PathBuf {
     PathBuf::from(daemon_name)
 }
 
+pub fn resolve_cli_exe() -> PathBuf {
+    let cli_name = if cfg!(windows) {
+        "agy-theme.exe"
+    } else {
+        "agy-theme"
+    };
+
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sibling = dir.join(cli_name);
+            if sibling.is_file() {
+                return sibling;
+            }
+        }
+        return exe;
+    }
+
+    PathBuf::from(cli_name)
+}
+
 pub fn resolve_port_file() -> PathBuf {
     if let Some(custom) = env::var_os("AGY_PORT_FILE").filter(|v| !v.is_empty()) {
         return PathBuf::from(custom);

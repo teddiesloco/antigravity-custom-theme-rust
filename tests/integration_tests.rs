@@ -3,6 +3,10 @@ use agy_theme::cdp::{
     evaluate_once, fetch_targets, filter_antigravity_pages, CdpTarget,
 };
 use agy_theme::config::{read_config, save_config_merge};
+use agy_theme::installer::{
+    remove_macos_launcher_app, render_macos_plist, sh_single_quote, write_macos_launcher_app,
+    MACOS_LAUNCHER_APP_NAME, MACOS_LAUNCHER_BUNDLE_ID, MACOS_SERVICE_LABEL,
+};
 use agy_theme::ws::compute_accept_key;
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -352,4 +356,101 @@ fn test_raster_downscale_and_alpha_avatar_encoding() {
     assert!(av_dec.color().has_alpha());
 
     let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn test_macos_plist_rendering_and_xml_escaping() {
+    let daemon = PathBuf::from("/tmp/My & <App>/agy-theme-daemon");
+    let root = PathBuf::from("/tmp/Teddy's \"Repo\"");
+    let log = PathBuf::from("/tmp/My & <App>/daemon.log");
+
+    let plist = render_macos_plist(&daemon, &root, &log, true);
+    assert!(plist.contains(&format!("<string>{MACOS_SERVICE_LABEL}</string>")));
+    assert!(plist.contains("/tmp/My &amp; &lt;App&gt;/agy-theme-daemon"));
+    assert!(plist.contains("/tmp/Teddy&apos;s &quot;Repo&quot;"));
+    assert!(plist.contains("<string>--watch-themes</string>"));
+    assert!(plist.contains("<key>ProcessType</key>"));
+
+    let plist_no_watch = render_macos_plist(&daemon, &root, &log, false);
+    assert!(!plist_no_watch.contains("--watch-themes"));
+}
+
+#[test]
+fn test_macos_launcher_app_create_and_remove_idempotent() {
+    let tmp = std::env::temp_dir().join(format!("agy_macos_app_test_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp);
+    let apps_dir = tmp.join("Applications");
+    let fake_icon = tmp.join("icon.icns");
+    fs::create_dir_all(&tmp).unwrap();
+    fs::write(&fake_icon, b"icns-stub").unwrap();
+
+    let cli = PathBuf::from("/tmp/dir with space/Teddy's/agy-theme");
+    let root = PathBuf::from("/tmp/dir with space/Teddy's/repo");
+    assert_eq!(sh_single_quote("a'b c"), "'a'\\''b c'");
+
+    let app_path = write_macos_launcher_app(&apps_dir, &cli, &root, Some(&fake_icon))
+        .expect("write_macos_launcher_app should succeed");
+    assert_eq!(app_path, apps_dir.join(MACOS_LAUNCHER_APP_NAME));
+
+    let info_plist = fs::read_to_string(app_path.join("Contents").join("Info.plist")).unwrap();
+    assert!(info_plist.contains(MACOS_LAUNCHER_BUNDLE_ID));
+    assert!(info_plist.contains("<key>LSUIElement</key>"));
+    assert!(info_plist.contains("<string>icon.icns</string>"));
+    assert!(app_path.join("Contents").join("Resources").join("icon.icns").is_file());
+
+    let launcher = app_path
+        .join("Contents")
+        .join("MacOS")
+        .join("antigravity-theme-launcher");
+    let script = fs::read_to_string(&launcher).unwrap();
+    assert!(script.contains("--remote-debugging-port=0"));
+    assert!(script.contains("CLI_BIN='/tmp/dir with space/Teddy'\\''s/agy-theme'"));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(&launcher).unwrap().permissions().mode();
+        assert_ne!(mode & 0o111, 0, "launcher script must be executable");
+        let syntax = std::process::Command::new("bash")
+            .args(["-n", &launcher.to_string_lossy()])
+            .status()
+            .expect("bash -n should run");
+        assert!(syntax.success(), "launcher script must pass bash -n");
+    }
+
+    assert!(remove_macos_launcher_app(&apps_dir).unwrap());
+    assert!(!app_path.exists());
+    assert!(!remove_macos_launcher_app(&apps_dir).unwrap());
+
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn test_bearrrr_eye_comfort_preset_contract() {
+    let themes_path = repo_root().join("themes").join("themes.json");
+    let themes = list_themes(&themes_path).expect("list_themes should succeed");
+    assert_eq!(themes[0].name, "WLOP Cosmic");
+    assert!(themes.len() >= 6);
+
+    let bearrrr = themes
+        .iter()
+        .find(|t| t.name == "Bearrrr Eye-Comfort Dark")
+        .expect("Bearrrr Eye-Comfort Dark preset must exist");
+    assert!(!bearrrr.is_light);
+    assert!(!bearrrr.has_wallpaper);
+    assert!(!bearrrr.has_sticker);
+
+    let raw: Value = serde_json::from_str(&fs::read_to_string(&themes_path).unwrap()).unwrap();
+    let cfg = &raw["Bearrrr Eye-Comfort Dark"];
+    assert_eq!(cfg["wallpaper"], json!(""));
+    assert_eq!(cfg["primary"], json!("#e5a93b"));
+    assert_eq!(cfg["secondary"], json!("#63c5da"));
+    assert_eq!(cfg["textColor"], json!("#eceff4"));
+    let serialized = cfg.to_string().to_ascii_lowercase();
+    for forbidden in ["#a78bfa", "#a855f7", "#f472b6"] {
+        assert!(
+            !serialized.contains(forbidden),
+            "Bearrrr Eye-Comfort Dark must not contain glaring purple {forbidden}"
+        );
+    }
 }

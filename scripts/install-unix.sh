@@ -34,8 +34,11 @@ case "$cmd" in
     install)
         exec "$CLI_BIN" --root "$REPO_ROOT" install "$@"
         ;;
+    launch)
+        exec "$CLI_BIN" --root "$REPO_ROOT" launch "$@"
+        ;;
     *)
-        echo "Usage: $0 [install|--foreground|stop|status|uninstall] [--no-startup] [--watch-themes]" >&2
+        echo "Usage: $0 [install|launch|--foreground|stop|status|uninstall] [--no-startup] [--watch-themes] [--restart]" >&2
         exit 2
         ;;
 esac

@@ -1,7 +1,9 @@
 use agy_theme::builder::{build_payload, list_themes, BuildOptions, DEFAULT_MAX_DIM};
 use agy_theme::cdp::verify_live;
 use agy_theme::daemon::{run as run_daemon, DaemonOptions};
-use agy_theme::installer::{install, print_status, start_daemon, stop_daemon, uninstall};
+use agy_theme::installer::{
+    install, launch_antigravity, print_status, start_daemon, stop_daemon, uninstall,
+};
 use agy_theme::paths::AppPaths;
 use agy_theme::sys::process_memory_stats;
 use std::env;
@@ -24,9 +26,11 @@ COMMANDS:
                 [--watch-themes]
   stop        Stop running background daemon
   status      Show daemon PID, live RAM usage, payload status, and CDP port
-  install     Build payload, patch Antigravity shortcuts, register auto-start, and start daemon
+  install     Build payload, patch Antigravity shortcuts / macOS launcher, register auto-start, and start daemon
                 [--no-startup] [--watch-themes]
-  uninstall   Remove auto-start, stop daemon, and restore Antigravity default UI
+  launch      Ensure daemon is running and open Antigravity with --remote-debugging-port=0 (macOS)
+                [--restart]
+  uninstall   Remove auto-start, macOS launcher, stop daemon, and restore Antigravity default UI
   verify      Live CDP inspection (themeActive, zero live blur, pills, browser hole)
   themes      List all configured presets in themes/themes.json
 
@@ -150,6 +154,11 @@ fn run_cli() -> Result<ExitCode, String> {
             let no_startup = rest.iter().any(|a| a == "--no-startup" || a == "-NoStartup");
             let watch_themes = rest.iter().any(|a| a == "--watch-themes");
             install(&paths, no_startup, watch_themes).map_err(|e| e.to_string())?;
+            Ok(ExitCode::SUCCESS)
+        }
+        "launch" => {
+            let restart = rest.iter().any(|a| a == "--restart");
+            launch_antigravity(&paths, restart).map_err(|e| e.to_string())?;
             Ok(ExitCode::SUCCESS)
         }
         "uninstall" => {

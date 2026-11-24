@@ -1,0 +1,116 @@
+{
+  "feature": "macos-support-and-eye-comfort",
+  "ba_audit_status": "PASS",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Architecture & Plan Lock",
+      "agents": [
+        "planner",
+        "ags-advisor",
+        "advisor"
+      ],
+      "skills": [
+        "ags-plan",
+        "ags-advise",
+        "ags-fable-thinking",
+        "ags-vibe",
+        "ags-context-engineering"
+      ],
+      "tasks": [
+        "Lock scope from docs/macos-support-and-eye-comfort/srs/spec.md: 4 BR, 4 error codes",
+        "Confirm 1 screen(s), 5 local CLI/MCP interface(s), 1 user story file(s) before coding"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Frontend UX/UI",
+      "agents": [
+        "ui-ux-designer"
+      ],
+      "skills": [
+        "ags-frontend-design",
+        "ags-ui-ux-pro-max",
+        "ags-ui-styling",
+        "ags-frontend-development",
+        "ags-page-builder",
+        "ags-react-best-practices",
+        "ags-tanstack",
+        "ags-threejs",
+        "ags-shader",
+        "ags-remotion",
+        "ags-hyperframes",
+        "ags-preview"
+      ],
+      "tasks": [
+        "Build screen main (docs/macos-support-and-eye-comfort/ascii-screen/main.md) with Loading/Empty/Error/Populated states; data-testid: bearrrr-theme-card, macos-install-action, macos-launch-action, macos-status-panel, macos-uninstall-action"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Backend API & DB",
+      "agents": [
+        "fullstack-developer"
+      ],
+      "skills": [
+        "ags-backend-development",
+        "ags-databases",
+        "ags-better-auth",
+        "ags-payment-integration",
+        "ags-mcp-builder",
+        "ags-devops",
+        "ags-deploy",
+        "ags-security"
+      ],
+      "tasks": [
+        "Implement local CLI/MCP interface: Surface: macos-install-action; CLI: agy-theme install; MCP: none; Input: --no-startup, --watch-themes, --root; Output: stdout install report (PID, RAM MB, LaunchAgent & App path); Persistence: theme_config.json, ~/Library/LaunchAgents/ (plist), ~/Applications/ (launcher bundle), dist payload; Errors: E-macos-support-and-eye-comfort-002, E-macos-support-and-eye-comfort-003, E-macos-support-and-eye-comfort-004",
+        "Implement local CLI/MCP interface: Surface: macos-launch-action; CLI: agy-theme launch; MCP: none; Input: --restart, --root; Output: stdout launch report + spawned Antigravity process with --remote-debugging-port=0; Persistence: theme_config.json (reads active config & starts daemon); Errors: E-macos-support-and-eye-comfort-001, E-macos-support-and-eye-comfort-002",
+        "Implement local CLI/MCP interface: Surface: macos-status-panel; CLI: agy-theme status; MCP: none; Input: --root; Output: stdout status lines (Root, Payload KB, Daemon PID/RSS, CDP port); Persistence: none (read-only); Errors: E-macos-support-and-eye-comfort-003",
+        "Implement local CLI/MCP interface: Surface: macos-uninstall-action; CLI: agy-theme uninstall; MCP: none; Input: --root; Output: stdout uninstall report (removed LaunchAgent, launcher app, cleared CDP pages); Persistence: theme_config.json (preserved), removes ~/Library/LaunchAgents/ plist & ~/Applications/ launcher bundle; Errors: E-macos-support-and-eye-comfort-002",
+        "Implement local CLI/MCP interface: Surface: bearrrr-theme-card; CLI: agy-theme build; MCP: none; Input: themes/themes.json, engine/core.js, --max-dim; Output: dist payload + build elapsed_ms & theme list; Persistence: themes/themes.json, theme_config.json; Errors: E-macos-support-and-eye-comfort-004",
+        "Enforce business rules: BR-macos-support-and-eye-comfort-001, BR-macos-support-and-eye-comfort-002, BR-macos-support-and-eye-comfort-003, BR-macos-support-and-eye-comfort-004",
+        "Return error codes: E-macos-support-and-eye-comfort-001, E-macos-support-and-eye-comfort-002, E-macos-support-and-eye-comfort-003, E-macos-support-and-eye-comfort-004"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "BDD Verification & Review",
+      "agents": [
+        "tester",
+        "code-reviewer",
+        "code-simplifier"
+      ],
+      "skills": [
+        "ags-test",
+        "ags-web-testing",
+        "ags-agent-browser",
+        "ags-code-review",
+        "ags-review-pr",
+        "ags-skill-creator",
+        "ags-ship"
+      ],
+      "tasks": [
+        "Automate docs/macos-support-and-eye-comfort/userstories/us-001.md: 5 Given/When/Then scenario(s) via E2E",
+        "Review diff against srs/spec.md, api-map.md and the prototype before merge"
+      ]
+    }
+  ],
+  "generated_from": [
+    "docs/macos-support-and-eye-comfort/api/api-map.md",
+    "docs/macos-support-and-eye-comfort/ascii-screen/_index.md",
+    "docs/macos-support-and-eye-comfort/ascii-screen/main.md",
+    "docs/macos-support-and-eye-comfort/html-design/prototype.html",
+    "docs/macos-support-and-eye-comfort/srs/spec.md",
+    "docs/macos-support-and-eye-comfort/srs/user-flow.md",
+    "docs/macos-support-and-eye-comfort/userstories/us-001.md"
+  ],
+  "sha256": {
+    "docs/macos-support-and-eye-comfort/srs/spec.md": "4f02ffdf3b43fb1c175ef9bebd13b23674f6518ac0cc0b1bc0af1bf08a0533f7",
+    "docs/macos-support-and-eye-comfort/srs/user-flow.md": "b990a7f963a3c993d491786a0067e28dfa5c1dcd374320164f39d70f4599c420",
+    "docs/macos-support-and-eye-comfort/ascii-screen/_index.md": "f97ddccf7156f6e6bafe760ceb39e7bfbb7b05daefcc9631ccd1619b30675982",
+    "docs/macos-support-and-eye-comfort/ascii-screen/main.md": "15a4d5eedbb9240e8ea3205eace91df6fd0e5e826b8b6cfb502f96f4c0f84819",
+    "docs/macos-support-and-eye-comfort/api/api-map.md": "c361d35e556808752196662853ecc4c8a1d59a5873733d8d6458996c01f899e4",
+    "docs/macos-support-and-eye-comfort/html-design/prototype.html": "6ab227f717872b834e1cbeea177e540471fdeb140ad9e087763e0e42441edd6f",
+    "docs/macos-support-and-eye-comfort/userstories/us-001.md": "fbce876dda169835cd840a140907edfa9c07a488a1e24ff7b770eb2fc5bbeb08"
+  }
+}
