@@ -4,14 +4,210 @@ use crate::paths::{read_port_info, resolve_daemon_exe, resolve_port_file, AppPat
 use crate::sys::{is_pid_alive, process_memory_stats, spawn_detached, terminate_pid};
 use crate::Result;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(target_os = "macos")]
-const SERVICE_LABEL: &str = "io.antigravity.custom-theme";
+pub const MACOS_SERVICE_LABEL: &str = "io.antigravity.custom-theme";
+pub const MACOS_LAUNCHER_APP_NAME: &str = "Antigravity Theme.app";
+pub const MACOS_LAUNCHER_BUNDLE_ID: &str = "io.antigravity.custom-theme.launcher";
 #[cfg(all(unix, not(target_os = "macos")))]
 const SYSTEMD_UNIT: &str = "antigravity-custom-theme.service";
+
+pub fn xml_escape(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+pub fn sh_single_quote(input: &str) -> String {
+    format!("'{}'", input.replace('\'', "'\\''"))
+}
+
+pub fn render_macos_plist(
+    daemon_exe: &Path,
+    root: &Path,
+    log_file: &Path,
+    watch_themes: bool,
+) -> String {
+    let extra_arg = if watch_themes {
+        "        <string>--watch-themes</string>\n"
+    } else {
+        ""
+    };
+    let daemon_xml = xml_escape(&daemon_exe.to_string_lossy());
+    let root_xml = xml_escape(&root.to_string_lossy());
+    let log_xml = xml_escape(&log_file.to_string_lossy());
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{MACOS_SERVICE_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{daemon_xml}</string>
+        <string>--root</string>
+        <string>{root_xml}</string>
+{extra_arg}    </array>
+    <key>WorkingDirectory</key>
+    <string>{root_xml}</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{log_xml}</string>
+    <key>StandardErrorPath</key>
+    <string>{log_xml}</string>
+</dict>
+</plist>
+"#
+    )
+}
+
+pub fn render_macos_launcher_info_plist(icon_name: Option<&str>) -> String {
+    let icon_block = match icon_name {
+        Some(name) if !name.trim().is_empty() => format!(
+            "    <key>CFBundleIconFile</key>\n    <string>{}</string>\n",
+            xml_escape(name.trim())
+        ),
+        _ => String::new(),
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Antigravity Theme</string>
+    <key>CFBundleExecutable</key>
+    <string>antigravity-theme-launcher</string>
+    <key>CFBundleIdentifier</key>
+    <string>{MACOS_LAUNCHER_BUNDLE_ID}</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Antigravity Theme</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+    <key>LSUIElement</key>
+    <true/>
+{icon_block}</dict>
+</plist>
+"#
+    )
+}
+
+pub fn render_macos_launcher_script(cli_exe: &Path, root: &Path) -> String {
+    let cli_q = sh_single_quote(&cli_exe.to_string_lossy());
+    let root_q = sh_single_quote(&root.to_string_lossy());
+    format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+
+CLI_BIN={cli_q}
+REPO_ROOT={root_q}
+PID_FILE="$REPO_ROOT/daemon.pid"
+
+daemon_alive=0
+if [ -f "$PID_FILE" ]; then
+    pid="$(tr -d '[:space:]' < "$PID_FILE" || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        daemon_alive=1
+    fi
+fi
+
+if [ "$daemon_alive" -eq 0 ] && [ -x "$CLI_BIN" ]; then
+    "$CLI_BIN" --root "$REPO_ROOT" start >/dev/null 2>&1 || true
+fi
+
+APP_PATH=""
+for candidate in "/Applications/Antigravity.app" "$HOME/Applications/Antigravity.app"; do
+    if [ -d "$candidate" ]; then
+        APP_PATH="$candidate"
+        break
+    fi
+done
+
+if [ -z "$APP_PATH" ]; then
+    osascript -e 'display alert "Antigravity.app not found" message "Install Antigravity in /Applications/Antigravity.app and try again." as warning' >/dev/null 2>&1 || true
+    exit 1
+fi
+
+exec open -a "$APP_PATH" --args --remote-debugging-port=0 "$@"
+"#
+    )
+}
+
+pub fn write_macos_launcher_app(
+    apps_dir: &Path,
+    cli_exe: &Path,
+    root: &Path,
+    icon_source: Option<&Path>,
+) -> Result<PathBuf> {
+    let app_dir = apps_dir.join(MACOS_LAUNCHER_APP_NAME);
+    let macos_dir = app_dir.join("Contents").join("MacOS");
+    let resources_dir = app_dir.join("Contents").join("Resources");
+    fs::create_dir_all(&macos_dir)?;
+    fs::create_dir_all(&resources_dir)?;
+
+    let mut icon_name: Option<&str> = None;
+    if let Some(src) = icon_source {
+        if src.is_file() {
+            let dst = resources_dir.join("icon.icns");
+            if fs::copy(src, &dst).is_ok() {
+                icon_name = Some("icon.icns");
+            }
+        }
+    }
+
+    let info_plist = render_macos_launcher_info_plist(icon_name);
+    fs::write(app_dir.join("Contents").join("Info.plist"), info_plist)?;
+
+    let launcher_path = macos_dir.join("antigravity-theme-launcher");
+    let script = render_macos_launcher_script(cli_exe, root);
+    fs::write(&launcher_path, script)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&launcher_path)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&launcher_path, perms)?;
+    }
+
+    Ok(app_dir)
+}
+
+pub fn remove_macos_launcher_app(apps_dir: &Path) -> Result<bool> {
+    let app_dir = apps_dir.join(MACOS_LAUNCHER_APP_NAME);
+    if app_dir.exists() {
+        fs::remove_dir_all(&app_dir)?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
 
 pub fn read_running_pid(paths: &AppPaths) -> Option<u32> {
     let raw = fs::read_to_string(&paths.pid_file).ok()?;
@@ -355,66 +551,198 @@ foreach ($Dir in $SearchDirs) {{
 }
 
 #[cfg(target_os = "macos")]
-fn install_macos(paths: &AppPaths, no_startup: bool, watch_themes: bool) -> Result<()> {
-    use std::process::Command;
-    if no_startup {
-        let pid = start_daemon(paths, watch_themes)?;
-        println!("[install] Rust daemon running (PID {pid}).");
-        return Ok(());
+fn current_macos_uid() -> u32 {
+    extern "C" {
+        fn getuid() -> u32;
     }
-    let daemon_exe = resolve_daemon_exe();
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    let plist_dir = Path::new(&home).join("Library").join("LaunchAgents");
-    fs::create_dir_all(&plist_dir)?;
-    let plist_path = plist_dir.join(format!("{SERVICE_LABEL}.plist"));
+    unsafe { getuid() }
+}
 
-    let extra_arg = if watch_themes {
-        "        <string>--watch-themes</string>\n"
-    } else {
-        ""
-    };
-    let plist = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{SERVICE_LABEL}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{}</string>
-        <string>--root</string>
-        <string>{}</string>
-{extra_arg}    </array>
-    <key>WorkingDirectory</key>
-    <string>{}</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>{}</string>
-    <key>StandardErrorPath</key>
-    <string>{}</string>
-</dict>
-</plist>
-"#,
-        daemon_exe.display(),
-        paths.root.display(),
-        paths.root.display(),
-        paths.log_file.display(),
-        paths.log_file.display(),
-    );
-    fs::write(&plist_path, plist)?;
+#[cfg(target_os = "macos")]
+fn macos_home_dir() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
 
+#[cfg(target_os = "macos")]
+fn find_antigravity_app() -> Option<PathBuf> {
+    if let Some(custom) = std::env::var_os("AGY_APP_PATH").filter(|v| !v.is_empty()) {
+        let p = PathBuf::from(custom);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    let system_app = PathBuf::from("/Applications/Antigravity.app");
+    if system_app.is_dir() {
+        return Some(system_app);
+    }
+    let user_app = macos_home_dir()
+        .join("Applications")
+        .join("Antigravity.app");
+    if user_app.is_dir() {
+        return Some(user_app);
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn bootout_macos_agent(plist_path: &Path) {
+    use std::process::Command;
+    let uid = current_macos_uid();
+    let domain = format!("gui/{uid}");
+    let service = format!("gui/{uid}/{MACOS_SERVICE_LABEL}");
+    let _ = Command::new("launchctl")
+        .args(["bootout", &service])
+        .output();
+    let _ = Command::new("launchctl")
+        .args(["bootout", &domain, &plist_path.to_string_lossy()])
+        .output();
     let _ = Command::new("launchctl")
         .args(["unload", &plist_path.to_string_lossy()])
         .output();
-    let _ = Command::new("launchctl")
-        .args(["load", "-w", &plist_path.to_string_lossy()])
-        .output();
-    println!("[install] LaunchAgent installed: {}", plist_path.display());
+}
+
+#[cfg(target_os = "macos")]
+fn install_macos(paths: &AppPaths, no_startup: bool, watch_themes: bool) -> Result<()> {
+    use crate::paths::resolve_cli_exe;
+    use std::process::Command;
+
+    let home = macos_home_dir();
+    let apps_dir = home.join("Applications");
+    let cli_exe = resolve_cli_exe();
+    let icon_source = find_antigravity_app()
+        .map(|app| app.join("Contents").join("Resources").join("icon.icns"));
+    let launcher_app =
+        write_macos_launcher_app(&apps_dir, &cli_exe, &paths.root, icon_source.as_deref())?;
+    println!("[install] macOS CDP launcher ready: {}", launcher_app.display());
+
+    let pid = if no_startup {
+        start_daemon(paths, watch_themes)?
+    } else {
+        let daemon_exe = resolve_daemon_exe();
+        let plist_dir = home.join("Library").join("LaunchAgents");
+        fs::create_dir_all(&plist_dir)?;
+        let plist_path = plist_dir.join(format!("{MACOS_SERVICE_LABEL}.plist"));
+
+        let plist = render_macos_plist(&daemon_exe, &paths.root, &paths.log_file, watch_themes);
+        fs::write(&plist_path, plist)?;
+
+        bootout_macos_agent(&plist_path);
+        let uid = current_macos_uid();
+        let domain = format!("gui/{uid}");
+
+        let bootstrap = Command::new("launchctl")
+            .args(["bootstrap", &domain, &plist_path.to_string_lossy()])
+            .output();
+        let _loaded = match bootstrap {
+            Ok(ref o) if o.status.success() => true,
+            _ => Command::new("launchctl")
+                .args(["load", "-w", &plist_path.to_string_lossy()])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false),
+        };
+        println!("[install] LaunchAgent installed: {}", plist_path.display());
+
+        let mut running_pid = None;
+        for _ in 0..20 {
+            if let Some(p) = read_running_pid(paths) {
+                running_pid = Some(p);
+                break;
+            }
+            thread::sleep(Duration::from_millis(150));
+        }
+        match running_pid {
+            Some(p) => p,
+            None => start_daemon(paths, watch_themes)?,
+        }
+    };
+
+    let mem_note = process_memory_stats(pid)
+        .map(|m| format!(" (~{:.2} MB RSS)", m.working_set_kb as f64 / 1024.0))
+        .unwrap_or_default();
+    println!("[install] Rust daemon running silently (PID {pid}){mem_note}.");
+
+    if read_port_info().is_none() {
+        println!(
+            "[install] Note: DevToolsActivePort not found yet. Quit Antigravity (Cmd+Q) and reopen via \"{}\" (or run `agy-theme launch`).",
+            launcher_app.display()
+        );
+    }
     Ok(())
+}
+
+pub fn launch_antigravity(paths: &AppPaths, restart: bool) -> Result<()> {
+    if read_running_pid(paths).is_none() {
+        let pid = start_daemon(paths, false)?;
+        println!("[launch] Started Rust theme daemon (PID {pid}).");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+
+        let app_path = find_antigravity_app().ok_or(
+            "Antigravity.app not found in /Applications or ~/Applications. Install Antigravity or set AGY_APP_PATH.",
+        )?;
+
+        if restart {
+            println!("[launch] Requesting graceful quit of Antigravity...");
+            let _ = Command::new("osascript")
+                .args(["-e", "tell application \"Antigravity\" to quit"])
+                .output();
+            for _ in 0..25 {
+                let still_running = Command::new("pgrep")
+                    .args(["-x", "Antigravity"])
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+                if !still_running {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(200));
+            }
+        }
+
+        let status = Command::new("open")
+            .args([
+                "-a",
+                &app_path.to_string_lossy(),
+                "--args",
+                "--remote-debugging-port=0",
+            ])
+            .status()?;
+        if !status.success() {
+            return Err(format!("Failed to launch {} via `open -a`.", app_path.display()).into());
+        }
+        println!(
+            "[launch] Launched {} with --remote-debugging-port=0.",
+            app_path.display()
+        );
+
+        for _ in 0..15 {
+            if read_port_info().is_some() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(150));
+        }
+        if read_port_info().is_none() {
+            println!(
+                "[launch] Note: DevToolsActivePort not active yet. If Antigravity remained open without CDP (e.g. unsaved dialog), quit it (Cmd+Q) and run `agy-theme launch` again."
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = restart;
+        println!(
+            "[launch] `agy-theme launch` is tailored for macOS. On Windows open the patched Antigravity shortcut; on Linux run `antigravity --remote-debugging-port=0`."
+        );
+        Ok(())
+    }
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -465,6 +793,7 @@ fn install_linux(paths: &AppPaths, no_startup: bool, watch_themes: bool) -> Resu
 }
 
 fn remove_autostart(paths: &AppPaths) {
+    let _ = paths;
     #[cfg(windows)]
     {
         use std::process::Command;
@@ -515,17 +844,21 @@ fn remove_autostart(paths: &AppPaths) {
 
     #[cfg(target_os = "macos")]
     {
-        use std::process::Command;
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let plist = Path::new(&home)
+        let home = macos_home_dir();
+        let plist = home
             .join("Library")
             .join("LaunchAgents")
-            .join(format!("{SERVICE_LABEL}.plist"));
-        let _ = Command::new("launchctl")
-            .args(["unload", &plist.to_string_lossy()])
-            .output();
+            .join(format!("{MACOS_SERVICE_LABEL}.plist"));
+        bootout_macos_agent(&plist);
         if plist.is_file() && fs::remove_file(&plist).is_ok() {
             println!("[uninstall] Removed LaunchAgent plist: {}", plist.display());
+        }
+        let apps_dir = home.join("Applications");
+        if let Ok(true) = remove_macos_launcher_app(&apps_dir) {
+            println!(
+                "[uninstall] Removed macOS CDP launcher: {}",
+                apps_dir.join(MACOS_LAUNCHER_APP_NAME).display()
+            );
         }
     }
 

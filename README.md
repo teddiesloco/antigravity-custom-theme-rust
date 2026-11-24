@@ -117,6 +117,16 @@ cargo build --release
 # hoặc: bash scripts/install-unix.sh
 ```
 
+Trên **macOS** (Antigravity v2.33.0+ không tự bật `DevToolsActivePort` nếu mở trực tiếp từ icon gốc):
+- Lệnh `agy-theme install` tự cài LaunchAgent (`launchctl bootstrap`), khởi chạy daemon nền (~1 MB RAM) và tạo app launcher **`~/Applications/Antigravity Theme.app`** (không sửa `/Applications/Antigravity.app`, giữ nguyên chữ ký & `ElectronAsarIntegrity`).
+- Mở Antigravity có sẵn theme qua Spotlight/Applications bằng **`Antigravity Theme`** hoặc từ terminal:
+  ```bash
+  ./target/release/agy-theme launch
+  # hoặc thoát và mở lại có cờ CDP:
+  ./target/release/agy-theme launch --restart
+  ```
+- Preset nhẹ nhất cho macOS: **`Bearrrr Eye-Comfort Dark`** (Pure-CSS 0 ảnh, tông trầm dịu mắt Warm Amber + Frost Cyan, không tím chói).
+
 Có thể tuỳ chỉnh vị trí `DevToolsActivePort` bất cứ lúc nào bằng biến môi trường `AGY_PORT_FILE=/path/to/DevToolsActivePort`.
 
 ## Cấu trúc dự án

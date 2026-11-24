@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>macOS CDP Launcher &amp; Bearrrr Eye-Comfort Dark Prototype</title>
+  <style>
+    :root {
+      --bg: #0d121a;
+      --card: #161b22;
+      --border: #4c566a;
+      --amber: #e5a93b;
+      --cyan: #63c5da;
+      --gold: #ebcb8b;
+      --text: #eceff4;
+      --muted: #9aa5b8;
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: radial-gradient(circle at 80% 18%, rgba(99, 197, 218, 0.14), transparent 50%),
+                  radial-gradient(circle at 18% 82%, rgba(229, 169, 59, 0.14), transparent 52%),
+                  linear-gradient(160deg, #0d121a 0%, #090d14 100%);
+      color: var(--text);
+      padding: 24px;
+    }
+    nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    nav button { background: var(--card); color: var(--gold); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .card { background: rgba(22, 27, 34, 0.88); border: 1px solid rgba(99, 197, 218, 0.28); border-radius: 10px; padding: 16px; }
+    .swatches { display: flex; gap: 8px; margin-top: 8px; }
+    .swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(236, 239, 244, 0.3); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .btn-primary { background: var(--amber); color: #0d121a; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    .btn-secondary { background: var(--card); color: var(--cyan); border: 1px solid var(--cyan); padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    .btn-danger { background: #261619; color: #f0949d; border: 1px solid #e06c75; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <nav>
+    <button data-state="loading">Loading</button>
+    <button data-state="empty">Empty</button>
+    <button data-state="error">Error</button>
+    <button data-state="populated">Populated</button>
+  </nav>
+  <main>
+    <h1>Antigravity Theme — macOS Control &amp; Bearrrr Eye-Comfort Dark</h1>
+    <div class="grid">
+      <section class="card" data-testid="macos-status-panel">
+        <h2>Trạng thái Daemon &amp; CDP</h2>
+        <p>Daemon: RUNNING (~1.0 MB RAM · 0.0% CPU)</p>
+        <p>Port: DevToolsActivePort (127.0.0.1 CDP)</p>
+      </section>
+      <section class="card" data-testid="bearrrr-theme-card">
+        <h2>Bearrrr Eye-Comfort Dark</h2>
+        <p>Pure-CSS Gradient · Zero-Image · Zero Live Blur · Không tím chói</p>
+        <div class="swatches">
+          <span class="swatch" style="background:#e5a93b" title="Warm Amber"></span>
+          <span class="swatch" style="background:#63c5da" title="Frost Cyan"></span>
+          <span class="swatch" style="background:#ebcb8b" title="Honey Gold"></span>
+          <span class="swatch" style="background:#161b22" title="Nord Obsidian"></span>
+        </div>
+      </section>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" data-testid="macos-install-action">Cài macOS LaunchAgent &amp; App Launcher</button>
+      <button class="btn-secondary" data-testid="macos-launch-action">Mở Antigravity (CDP)</button>
+      <button class="btn-danger" data-testid="macos-uninstall-action">Gỡ cài đặt sạch</button>
+    </div>
+  </main>
+</body>
+</html>
